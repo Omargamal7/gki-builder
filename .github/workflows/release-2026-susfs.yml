@@ -6,6 +6,13 @@ name: Build all 2026 android12-5.10 (SukiSU + SUSFS)
 
 on:
   workflow_dispatch:
+  # Also run when this workflow file is pushed to gki-a12-5.10, so the build
+  # can be kicked off without the workflow living on the default branch.
+  push:
+    branches:
+      - gki-a12-5.10
+    paths:
+      - .github/workflows/release-2026-susfs.yml
 
 jobs:
   build:
