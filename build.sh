@@ -9,11 +9,15 @@ HOST="ztc1997"
 TIMEZONE="Asia/Makassar"
 ANYKERNEL_REPO="https://github.com/linastorvaldz/anykernel"
 ANYKERNEL_BRANCH="android12-5.10"
-KERNEL_REPO="https://github.com/linastorvaldz/kernel_common"
-KERNEL_BRANCH="android12-5.10-lts"
+# Kernel source can be overridden from the CI (per 2026 GKI branch).
+# Defaults to the current 2026 android12-5.10 GKI branch from AOSP common.
+KERNEL_REPO="${KERNEL_REPO:-https://android.googlesource.com/kernel/common}"
+KERNEL_BRANCH="${KERNEL_BRANCH:-android12-5.10-2026-07}"
 KERNEL_DEFCONFIG="gki_defconfig"
 DEFCONFIG_TO_MERGE=""
-GKI_RELEASES_REPO="https://github.com/linastorvaldz/quartix-releases"
+# Where finished builds get published. Defaults to this fork so no external
+# repo access is required; override GKI_RELEASES_REPO to change it.
+GKI_RELEASES_REPO="${GKI_RELEASES_REPO:-https://github.com/${GITHUB_REPOSITORY:-Omargamal7/gki-builder}}"
 #CLANG_URL="https://github.com/linastorvaldz/idk/releases/download/clang-r547379/clang.tgz"
 CLANG_URL="$(./clang.sh aosp)"
 CLANG_BRANCH=""
@@ -32,7 +36,7 @@ source $WORKDIR/functions.sh
 sudo timedatectl set-timezone "$TIMEZONE" || export TZ="$TIMEZONE"
 
 # Clone kernel source
-log "Cloning kernel source from $(simplify_gh_url "$KERNEL_REPO")"
+log "Cloning kernel source from $(simplify_gh_url "$KERNEL_REPO") ($KERNEL_BRANCH)"
 git clone -q --depth=1 $KERNEL_REPO -b $KERNEL_BRANCH $KSRC
 
 cd $KSRC
@@ -59,7 +63,7 @@ AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 CLANG_DIR="$WORKDIR/clang"
 CLANG_BIN="${CLANG_DIR}/bin"
 if [[ -z "$CLANG_BRANCH" ]]; then
-  log "🔽 Downloading Clang..."
+  log "\U0001F53D Downloading Clang..."
   wget -qO clang-archive "$CLANG_URL"
   mkdir -p "$CLANG_DIR"
   case "$(basename $CLANG_URL)" in
@@ -82,7 +86,7 @@ if [[ -z "$CLANG_BRANCH" ]]; then
     rm -rf $SINGLE_DIR
   fi
 else
-  log "🔽 Cloning Clang..."
+  log "\U0001F53D Cloning Clang..."
   git clone --depth=1 -q "$CLANG_URL" -b "$CLANG_BRANCH" "$CLANG_DIR"
 fi
 
@@ -129,7 +133,7 @@ if ksu_included; then
   case "$KSU" in
     "Next") install_ksu KernelSU-Next/KernelSU-Next next ;;
     "Magic") install_ksu 5ec1cff/KernelSU main ;;
-    "Suki") install_ksu SukiSU-Ultra/SukiSU-Ultra $(if susfs_included; then echo "susfs-main"; elif ksu_manual_hook; then echo "nongki"; else echo "main"; fi) ;;
+    "Suki") install_ksu SukiSU-Ultra/SukiSU-Ultra $(if susfs_included; then echo "susfs_new"; elif ksu_manual_hook; then echo "nongki"; else echo "main"; fi) ;;
   esac
   config --enable CONFIG_KSU
   config --disable CONFIG_KSU_MANUAL_SU
@@ -240,11 +244,12 @@ export KCFLAGS="-w -mcpu=cortex-a55 -mtune=cortex-a76"
 
 text=$(
   cat << EOF
-🐧 *Linux Version*: $LINUX_VERSION
-📅 *Build Date*: $KBUILD_BUILD_TIMESTAMP
-📛 *KernelSU*: ${KSU}
+\U0001F427 *Linux Version*: $LINUX_VERSION
+\U0001F33F *GKI Branch*: $KERNEL_BRANCH
+\U0001F4C5 *Build Date*: $KBUILD_BUILD_TIMESTAMP
+\U0001F4DB *KernelSU*: ${KSU}
 ඞ *SuSFS*: $(susfs_included && echo "$SUSFS_VERSION" || echo "None")
-🔰 *Compiler*: $COMPILER_STRING
+\U0001F530 *Compiler*: $COMPILER_STRING
 EOF
 )
 
@@ -281,24 +286,6 @@ make ${MAKE_ARGS[@]} Image
 ## Post-compiling stuff
 cd $WORKDIR
 
-# Patch the kernel Image for KPM Supports
-#if [[ $KSU == "Suki" ]]; then
-#  tempdir=$(mktemp -d) && cd $tempdir
-#
-#  # Setup patching tool
-#  LATEST_SUKISU_PATCH=$(curl -s "https://api.github.com/repos/SukiSU-Ultra/SukiSU_KernelPatch_patch/releases/latest" | grep "browser_download_url" | grep "patch_linux" | cut -d '"' -f 4)
-#  curl -Ls "$LATEST_SUKISU_PATCH" -o patch_linux
-#  chmod a+x ./patch_linux
-#
-#  # Patch the kernel image
-#  cp $KERNEL_IMAGE ./Image
-#  sudo ./patch_linux
-#  mv oImage Image
-#  KERNEL_IMAGE=$(pwd)/Image
-#
-#  cd -
-#fi
-
 # Clone AnyKernel
 log "Cloning anykernel from $(simplify_gh_url "$ANYKERNEL_REPO")"
 git clone -q --depth=1 $ANYKERNEL_REPO -b $ANYKERNEL_BRANCH anykernel
@@ -327,7 +314,7 @@ zip -r9 $WORKDIR/$AK3_ZIP_NAME ./*
 cd $OLDPWD
 
 if [[ $STATUS != "BETA" ]]; then
-  echo "BASE_NAME=$KERNEL_NAME-$VARIANT" >> $GITHUB_ENV
+  echo "BASE_NAME=$KERNEL_NAME-$VARIANT-$KERNEL_BRANCH" >> $GITHUB_ENV
   mkdir -p $WORKDIR/artifacts
   mv $WORKDIR/*.zip $WORKDIR/artifacts
 fi
@@ -345,7 +332,7 @@ if [[ $STATUS == "BETA" ]]; then
   upload_file "$WORKDIR/$AK3_ZIP_NAME" "$text"
   upload_file "$WORKDIR/build.log"
 else
-  send_msg "✅ Build Succeeded for $VARIANT variant."
+  send_msg "✅ Build Succeeded for $VARIANT variant ($KERNEL_BRANCH)."
 fi
 
 exit 0
