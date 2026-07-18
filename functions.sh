@@ -11,7 +11,14 @@ upload_file() {
   local CAPTION="${2:-}"
 
   if ! [[ -f $FILE ]]; then
-    error "file $FILE doesn't exist"
+    echo "[WARN] file $FILE doesn't exist, skipping upload"
+    return 0
+  fi
+
+  # Telegram is optional. If credentials are not set, skip silently.
+  if [[ -z "${TG_BOT_TOKEN:-}" || -z "${TG_CHAT_ID:-}" ]]; then
+    echo "[INFO] Telegram not configured, skipping upload of $FILE"
+    return 0
   fi
 
   chmod 777 "$FILE"
@@ -27,6 +34,13 @@ upload_file() {
 # send_msg
 send_msg() {
   local MESSAGE="$1"
+
+  # Telegram is optional. If credentials are not set, skip silently.
+  if [[ -z "${TG_BOT_TOKEN:-}" || -z "${TG_CHAT_ID:-}" ]]; then
+    echo "[INFO] Telegram not configured, skipping message: $MESSAGE"
+    return 0
+  fi
+
   curl -s -X POST "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" \
     -d "chat_id=$TG_CHAT_ID" \
     -d "disable_web_page_preview=true" \

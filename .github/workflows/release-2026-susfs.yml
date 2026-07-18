@@ -1,0 +1,99 @@
+name: Build all 2026 android12-5.10 (SukiSU + SUSFS)
+
+# Builds every 2026 android12-5.10 GKI branch with the latest SukiSU-Ultra +
+# SUSFS, and packages each as a flashable AnyKernel3 zip (OrangeFox / TWRP).
+# All zips are published as a single GitHub Release in this repository.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          # kernel_version is informational; the sublevel comes from the branch Makefile.
+          - { branch: "android12-5.10-2026-07", kernel_version: "5.10.257", last: "false" }
+          - { branch: "android12-5.10-2026-04", kernel_version: "5.10.252", last: "false" }
+          - { branch: "android12-5.10-2025-12", kernel_version: "5.10.246", last: "true" }
+
+    name: Build ${{ matrix.target.branch }} (${{ matrix.target.kernel_version }})
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+    with:
+      KSU: "Suki"
+      KSU_SUSFS: "true"
+      KSU_MANUAL_HOOK: "true"
+      LAST_BUILD: ${{ matrix.target.last }}
+      TODO: "kernel"
+      KERNEL_BRANCH: ${{ matrix.target.branch }}
+
+  release:
+    name: Publish unified release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout current repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_files
+
+      - name: Extract variables from info.txt
+        run: |
+          info_file=$(find release_files -name "info.txt" -type f | head -1)
+          if [[ -f "$info_file" ]]; then
+            echo "Found info.txt at: $info_file"
+            while IFS='=' read -r key value; do
+              [[ -z "$key" || "$key" =~ ^#.*$ ]] && continue
+              key=$(echo "$key" | xargs)
+              value=$(echo "$value" | xargs)
+              if [[ -n "$key" && -n "$value" ]]; then
+                echo "Setting: $key=$value"
+                echo "$key=$value" >> $GITHUB_ENV
+              fi
+            done < "$info_file"
+          fi
+
+      - name: Generate release tag
+        run: |
+          RELEASE_TAG="gki-a12-5.10-susfs-$(date +%Y%m%d)-${{ github.run_number }}"
+          echo "Release tag: $RELEASE_TAG"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> $GITHUB_ENV
+
+      - name: Publish GitHub Release (this repo)
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ env.RELEASE_TAG }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          prerelease: true
+          files: release_files/**/*.zip
+          body: |
+            ### GKI android12-5.10 - SukiSU-Ultra + SUSFS
+            Flashable AnyKernel3 zips (OrangeFox / TWRP).
+
+            **Targets built**
+            - `android12-5.10-2026-07` -> 5.10.257
+            - `android12-5.10-2026-04` -> 5.10.252
+            - `android12-5.10-2025-12` -> 5.10.246
+
+            **Root**: SukiSU-Ultra (`susfs_new`) + manual hooks
+            **SUSFS**: ${{ env.SUSFS_VERSION }} (simonpunk/susfs4ksu - gki-android12-5.10)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Notify Telegram (optional)
+        if: ${{ env.RELEASE_TAG != '' }}
+        run: |
+          source functions.sh
+          send_msg "Release completed! https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }}"
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
