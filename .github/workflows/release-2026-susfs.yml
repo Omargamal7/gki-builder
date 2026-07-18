@@ -33,6 +33,8 @@ jobs:
     name: Publish unified release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout current repo
         uses: actions/checkout@v4
@@ -74,7 +76,7 @@ jobs:
           prerelease: true
           files: release_files/**/*.zip
           body: |
-            ### GKI android12-5.10 · SukiSU-Ultra + SUSFS
+            ### GKI android12-5.10 - SukiSU-Ultra + SUSFS
             Flashable AnyKernel3 zips (OrangeFox / TWRP).
 
             **Targets built**

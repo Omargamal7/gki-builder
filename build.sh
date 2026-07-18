@@ -63,7 +63,7 @@ AK3_ZIP_NAME=${AK3_ZIP_NAME//VARIANT/$VARIANT}
 CLANG_DIR="$WORKDIR/clang"
 CLANG_BIN="${CLANG_DIR}/bin"
 if [[ -z "$CLANG_BRANCH" ]]; then
-  log "\U0001F53D Downloading Clang..."
+  log "Downloading Clang..."
   wget -qO clang-archive "$CLANG_URL"
   mkdir -p "$CLANG_DIR"
   case "$(basename $CLANG_URL)" in
@@ -86,7 +86,7 @@ if [[ -z "$CLANG_BRANCH" ]]; then
     rm -rf $SINGLE_DIR
   fi
 else
-  log "\U0001F53D Cloning Clang..."
+  log "Cloning Clang..."
   git clone --depth=1 -q "$CLANG_URL" -b "$CLANG_BRANCH" "$CLANG_DIR"
 fi
 
@@ -244,12 +244,12 @@ export KCFLAGS="-w -mcpu=cortex-a55 -mtune=cortex-a76"
 
 text=$(
   cat << EOF
-\U0001F427 *Linux Version*: $LINUX_VERSION
-\U0001F33F *GKI Branch*: $KERNEL_BRANCH
-\U0001F4C5 *Build Date*: $KBUILD_BUILD_TIMESTAMP
-\U0001F4DB *KernelSU*: ${KSU}
-ඞ *SuSFS*: $(susfs_included && echo "$SUSFS_VERSION" || echo "None")
-\U0001F530 *Compiler*: $COMPILER_STRING
+Linux Version: $LINUX_VERSION
+GKI Branch: $KERNEL_BRANCH
+Build Date: $KBUILD_BUILD_TIMESTAMP
+KernelSU: ${KSU}
+SuSFS: $(susfs_included && echo "$SUSFS_VERSION" || echo "None")
+Compiler: $COMPILER_STRING
 EOF
 )
 
@@ -313,11 +313,11 @@ cp $KERNEL_IMAGE .
 zip -r9 $WORKDIR/$AK3_ZIP_NAME ./*
 cd $OLDPWD
 
-if [[ $STATUS != "BETA" ]]; then
-  echo "BASE_NAME=$KERNEL_NAME-$VARIANT-$KERNEL_BRANCH" >> $GITHUB_ENV
-  mkdir -p $WORKDIR/artifacts
-  mv $WORKDIR/*.zip $WORKDIR/artifacts
-fi
+# Stage the flashable zip as a downloadable artifact for every run so a
+# no-secrets manual build still publishes output (BETA or RELEASE).
+echo "BASE_NAME=$KERNEL_NAME-$VARIANT-$KERNEL_BRANCH" >> $GITHUB_ENV
+mkdir -p $WORKDIR/artifacts
+mv $WORKDIR/*.zip $WORKDIR/artifacts
 
 if [[ $LAST_BUILD == "true" && $STATUS != "BETA" ]]; then
   (
@@ -329,10 +329,10 @@ if [[ $LAST_BUILD == "true" && $STATUS != "BETA" ]]; then
 fi
 
 if [[ $STATUS == "BETA" ]]; then
-  upload_file "$WORKDIR/$AK3_ZIP_NAME" "$text"
+  upload_file "$WORKDIR/artifacts/$AK3_ZIP_NAME" "$text"
   upload_file "$WORKDIR/build.log"
 else
-  send_msg "✅ Build Succeeded for $VARIANT variant ($KERNEL_BRANCH)."
+  send_msg "Build Succeeded for $VARIANT variant ($KERNEL_BRANCH)."
 fi
 
 exit 0
